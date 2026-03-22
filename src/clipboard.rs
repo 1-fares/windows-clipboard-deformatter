@@ -68,6 +68,8 @@ pub fn strip_formatting(hwnd: HWND) -> Result<bool, AppError> {
         let new_hglobal = GlobalAlloc(GMEM_MOVEABLE, byte_size)?;
         let new_ptr = GlobalLock(new_hglobal);
         if new_ptr.is_null() {
+            // new_hglobal leaks here, but GlobalLock on a fresh GMEM_MOVEABLE
+            // allocation essentially never fails.
             return Ok(false);
         }
 

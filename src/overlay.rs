@@ -162,84 +162,84 @@ pub fn paint(hwnd: HWND) {
     unsafe {
         let mut ps = PAINTSTRUCT::default();
         let hdc = BeginPaint(hwnd, &mut ps);
-        if hdc.is_invalid() {
-            return;
+
+        if !hdc.is_invalid() {
+            let mut rect = RECT::default();
+            let _ = GetClientRect(hwnd, &mut rect);
+
+            // Fill entire client area with color-key (these pixels become transparent)
+            let key_brush = CreateSolidBrush(COLOR_KEY);
+            FillRect(hdc, &rect, key_brush);
+            let _ = DeleteObject(key_brush.into());
+
+            // Draw rounded rectangle background in light green
+            let bg_brush = CreateSolidBrush(BG_COLOR);
+            let null_pen = GetStockObject(NULL_PEN);
+            let old_brush = SelectObject(hdc, bg_brush.into());
+            let old_pen = SelectObject(hdc, null_pen);
+            let _ = RoundRect(hdc, 0, 0, rect.right + 1, rect.bottom + 1, 24, 24);
+            SelectObject(hdc, old_pen);
+            SelectObject(hdc, old_brush);
+
+            // Set text drawing mode
+            SetBkMode(hdc, TRANSPARENT);
+            SetTextColor(hdc, TEXT_COLOR);
+
+            // Draw checkmark
+            let mut check_font_lf = LOGFONTW::default();
+            check_font_lf.lfHeight = -28;
+            let face = to_wide("Segoe UI Symbol");
+            let face_len = face.len().min(32);
+            check_font_lf.lfFaceName[..face_len].copy_from_slice(&face[..face_len]);
+            let check_font = CreateFontIndirectW(&check_font_lf);
+            let old_font = SelectObject(hdc, check_font.into());
+
+            let mut check_rect = RECT {
+                left: 0,
+                top: 2,
+                right: rect.right,
+                bottom: 48,
+            };
+            let mut checkmark: Vec<u16> = vec![0x2714]; // Heavy checkmark
+            DrawTextW(
+                hdc,
+                &mut checkmark,
+                &mut check_rect,
+                DT_CENTER | DT_SINGLELINE | DT_VCENTER,
+            );
+
+            // Draw "Clipboard cleaned" text
+            let mut text_font_lf = LOGFONTW::default();
+            text_font_lf.lfHeight = -15;
+            text_font_lf.lfWeight = FW_SEMIBOLD.0 as i32;
+            let face = to_wide("Segoe UI");
+            let face_len = face.len().min(32);
+            text_font_lf.lfFaceName[..face_len].copy_from_slice(&face[..face_len]);
+            let text_font = CreateFontIndirectW(&text_font_lf);
+            SelectObject(hdc, text_font.into());
+
+            let mut text_rect = RECT {
+                left: 0,
+                top: 44,
+                right: rect.right,
+                bottom: rect.bottom,
+            };
+            let mut label: Vec<u16> = "Clipboard cleaned".encode_utf16().collect();
+            DrawTextW(
+                hdc,
+                &mut label,
+                &mut text_rect,
+                DT_CENTER | DT_SINGLELINE | DT_VCENTER,
+            );
+
+            // Cleanup GDI objects
+            SelectObject(hdc, old_font);
+            let _ = DeleteObject(check_font.into());
+            let _ = DeleteObject(text_font.into());
+            let _ = DeleteObject(bg_brush.into());
         }
 
-        let mut rect = RECT::default();
-        let _ = GetClientRect(hwnd, &mut rect);
-
-        // Fill entire client area with color-key (these pixels become transparent)
-        let key_brush = CreateSolidBrush(COLOR_KEY);
-        FillRect(hdc, &rect, key_brush);
-        let _ = DeleteObject(key_brush.into());
-
-        // Draw rounded rectangle background in light green
-        let bg_brush = CreateSolidBrush(BG_COLOR);
-        let null_pen = GetStockObject(NULL_PEN);
-        let old_brush = SelectObject(hdc, bg_brush.into());
-        let old_pen = SelectObject(hdc, null_pen);
-        let _ = RoundRect(hdc, 0, 0, rect.right + 1, rect.bottom + 1, 24, 24);
-        SelectObject(hdc, old_pen);
-        SelectObject(hdc, old_brush);
-
-        // Set text drawing mode
-        SetBkMode(hdc, TRANSPARENT);
-        SetTextColor(hdc, TEXT_COLOR);
-
-        // Draw checkmark
-        let mut check_font_lf = LOGFONTW::default();
-        check_font_lf.lfHeight = -28;
-        let face = to_wide("Segoe UI Symbol");
-        let face_len = face.len().min(32);
-        check_font_lf.lfFaceName[..face_len].copy_from_slice(&face[..face_len]);
-        let check_font = CreateFontIndirectW(&check_font_lf);
-        let old_font = SelectObject(hdc, check_font.into());
-
-        let mut check_rect = RECT {
-            left: 0,
-            top: 2,
-            right: rect.right,
-            bottom: 48,
-        };
-        let mut checkmark: Vec<u16> = vec![0x2714]; // Heavy checkmark
-        DrawTextW(
-            hdc,
-            &mut checkmark,
-            &mut check_rect,
-            DT_CENTER | DT_SINGLELINE | DT_VCENTER,
-        );
-
-        // Draw "Clipboard cleaned" text
-        let mut text_font_lf = LOGFONTW::default();
-        text_font_lf.lfHeight = -15;
-        text_font_lf.lfWeight = FW_SEMIBOLD.0 as i32;
-        let face = to_wide("Segoe UI");
-        let face_len = face.len().min(32);
-        text_font_lf.lfFaceName[..face_len].copy_from_slice(&face[..face_len]);
-        let text_font = CreateFontIndirectW(&text_font_lf);
-        SelectObject(hdc, text_font.into());
-
-        let mut text_rect = RECT {
-            left: 0,
-            top: 44,
-            right: rect.right,
-            bottom: rect.bottom,
-        };
-        let mut label: Vec<u16> = "Clipboard cleaned".encode_utf16().collect();
-        DrawTextW(
-            hdc,
-            &mut label,
-            &mut text_rect,
-            DT_CENTER | DT_SINGLELINE | DT_VCENTER,
-        );
-
-        // Cleanup
-        SelectObject(hdc, old_font);
-        let _ = DeleteObject(check_font.into());
-        let _ = DeleteObject(text_font.into());
-        let _ = DeleteObject(bg_brush.into());
-
+        // EndPaint must always be called after BeginPaint
         let _ = EndPaint(hwnd, &ps);
     }
 }
