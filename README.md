@@ -50,4 +50,4 @@ To uninstall: right-click the tray icon, click Exit, delete the exe, and optiona
 
 ## License
 
-MIT
+GPL-3.0
