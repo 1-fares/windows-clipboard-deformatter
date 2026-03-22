@@ -4,6 +4,8 @@ A lightweight Windows 11 system tray app that strips clipboard formatting with a
 
 Press **Win + Shift + C** and whatever is on your clipboard gets replaced with its plain-text version. A brief overlay confirms the action, then fades out. Like pasting through Notepad, without the Notepad.
 
+**[Download the latest release](https://github.com/1-fares/windows-clipboard-deformatter/releases/latest/download/clipboard-deformatter.exe)**
+
 ## Features
 
 - **Global hotkey** (Win + Shift + C) strips rich formatting from the clipboard
