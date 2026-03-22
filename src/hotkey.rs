@@ -1,20 +1,17 @@
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    RegisterHotKey, UnregisterHotKey, HOT_KEY_MODIFIERS, MOD_WIN, VK_OEM_3,
+    RegisterHotKey, UnregisterHotKey, HOT_KEY_MODIFIERS, VK_C,
 };
 
 use crate::error::AppError;
 
-pub const HOTKEY_ID: i32 = 1;
+const HOTKEY_ID: i32 = 1;
+/// MOD_WIN | MOD_SHIFT | MOD_NOREPEAT
+const MODIFIERS: HOT_KEY_MODIFIERS = HOT_KEY_MODIFIERS(0x0008 | 0x0004 | 0x4000);
 
 pub fn register(hwnd: HWND) -> Result<(), AppError> {
     unsafe {
-        RegisterHotKey(
-            Some(hwnd),
-            HOTKEY_ID,
-            HOT_KEY_MODIFIERS(MOD_WIN.0),
-            VK_OEM_3.0 as u32,
-        )?;
+        RegisterHotKey(Some(hwnd), HOTKEY_ID, MODIFIERS, VK_C.0 as u32)?;
     }
     Ok(())
 }

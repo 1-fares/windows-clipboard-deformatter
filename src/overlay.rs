@@ -2,13 +2,13 @@ use windows::core::PCWSTR;
 use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, CreateFontIndirectW, CreateSolidBrush, DeleteObject, DrawTextW, EndPaint,
-    GetStockObject, RoundRect, SelectObject, SetBkMode, SetTextColor, DT_CENTER, DT_SINGLELINE,
-    DT_VCENTER, FW_SEMIBOLD, LOGFONTW, NULL_PEN, PAINTSTRUCT, TRANSPARENT,
+    FillRect, GetStockObject, RoundRect, SelectObject, SetBkMode, SetTextColor, DT_CENTER,
+    DT_SINGLELINE, DT_VCENTER, FW_SEMIBOLD, LOGFONTW, NULL_PEN, PAINTSTRUCT, TRANSPARENT,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, GetClientRect, GetSystemMetrics, KillTimer,
     RegisterClassExW, SetLayeredWindowAttributes, SetTimer, ShowWindow, SetWindowPos,
-    LWA_ALPHA, SM_CXSCREEN, SM_CYSCREEN, SW_HIDE, SW_SHOWNOACTIVATE,
+    SM_CXSCREEN, SM_CYSCREEN, SW_HIDE, SW_SHOWNOACTIVATE,
     SWP_NOACTIVATE, SWP_NOZORDER, WNDCLASSEXW,
     WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
     WS_POPUP, WM_ERASEBKGND, WM_PAINT, WM_TIMER,
@@ -24,6 +24,15 @@ pub const HOLD_STEPS: u8 = 12; // ~200ms at 16ms per step
 pub const TOTAL_STEPS: u8 = 25; // ~400ms total
 
 const CLASS_NAME: &str = "ClipDeformatOverlay";
+
+/// Magenta color key — pixels painted this color become fully transparent.
+const COLOR_KEY: COLORREF = COLORREF(0x00FF00FF);
+/// Light green background.  RGB(200, 230, 201)
+const BG_COLOR: COLORREF = COLORREF(0x00C9E6C8);
+/// Dark green text/checkmark.  RGB(46, 125, 50)
+const TEXT_COLOR: COLORREF = COLORREF(0x00327D2E);
+
+const LWA_FLAGS: u32 = 0x03; // LWA_COLORKEY | LWA_ALPHA
 
 fn to_wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
@@ -76,9 +85,14 @@ pub fn create_window(hinstance: HINSTANCE) -> Result<HWND, windows::core::Error>
         )?
     };
 
-    // Start fully transparent
+    // Start fully transparent, with color key active
     unsafe {
-        SetLayeredWindowAttributes(hwnd, COLORREF(0), 0, LWA_ALPHA)?;
+        SetLayeredWindowAttributes(
+            hwnd,
+            COLOR_KEY,
+            0,
+            windows::Win32::UI::WindowsAndMessaging::LAYERED_WINDOW_ATTRIBUTES_FLAGS(LWA_FLAGS),
+        )?;
     }
 
     Ok(hwnd)
@@ -100,7 +114,12 @@ pub fn show(hwnd: HWND) {
             OVERLAY_HEIGHT,
             SWP_NOZORDER | SWP_NOACTIVATE,
         );
-        let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 255, LWA_ALPHA);
+        let _ = SetLayeredWindowAttributes(
+            hwnd,
+            COLOR_KEY,
+            255,
+            windows::Win32::UI::WindowsAndMessaging::LAYERED_WINDOW_ATTRIBUTES_FLAGS(LWA_FLAGS),
+        );
         let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
         let _ = SetTimer(Some(hwnd), TIMER_ID, TIMER_INTERVAL_MS, None);
     }
@@ -128,13 +147,18 @@ pub fn tick_fade(hwnd: HWND, step: u8) -> bool {
         let fade_total = TOTAL_STEPS - HOLD_STEPS;
         let alpha = 255 - ((fade_progress as u16 * 255) / fade_total as u16) as u8;
         unsafe {
-            let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), alpha, LWA_ALPHA);
+            let _ = SetLayeredWindowAttributes(
+                hwnd,
+                COLOR_KEY,
+                alpha,
+                windows::Win32::UI::WindowsAndMessaging::LAYERED_WINDOW_ATTRIBUTES_FLAGS(LWA_FLAGS),
+            );
         }
         false
     }
 }
 
-pub fn paint(hwnd: HWND, accent_color: COLORREF) {
+pub fn paint(hwnd: HWND) {
     unsafe {
         let mut ps = PAINTSTRUCT::default();
         let hdc = BeginPaint(hwnd, &mut ps);
@@ -145,10 +169,15 @@ pub fn paint(hwnd: HWND, accent_color: COLORREF) {
         let mut rect = RECT::default();
         let _ = GetClientRect(hwnd, &mut rect);
 
-        // Draw rounded rectangle background with accent color
-        let brush = CreateSolidBrush(accent_color);
+        // Fill entire client area with color-key (these pixels become transparent)
+        let key_brush = CreateSolidBrush(COLOR_KEY);
+        FillRect(hdc, &rect, key_brush);
+        let _ = DeleteObject(key_brush.into());
+
+        // Draw rounded rectangle background in light green
+        let bg_brush = CreateSolidBrush(BG_COLOR);
         let null_pen = GetStockObject(NULL_PEN);
-        let old_brush = SelectObject(hdc, brush.into());
+        let old_brush = SelectObject(hdc, bg_brush.into());
         let old_pen = SelectObject(hdc, null_pen);
         let _ = RoundRect(hdc, 0, 0, rect.right + 1, rect.bottom + 1, 24, 24);
         SelectObject(hdc, old_pen);
@@ -156,7 +185,7 @@ pub fn paint(hwnd: HWND, accent_color: COLORREF) {
 
         // Set text drawing mode
         SetBkMode(hdc, TRANSPARENT);
-        SetTextColor(hdc, COLORREF(0x00FFFFFF)); // White
+        SetTextColor(hdc, TEXT_COLOR);
 
         // Draw checkmark
         let mut check_font_lf = LOGFONTW::default();
@@ -209,7 +238,7 @@ pub fn paint(hwnd: HWND, accent_color: COLORREF) {
         SelectObject(hdc, old_font);
         let _ = DeleteObject(check_font.into());
         let _ = DeleteObject(text_font.into());
-        let _ = DeleteObject(brush.into());
+        let _ = DeleteObject(bg_brush.into());
 
         let _ = EndPaint(hwnd, &ps);
     }
@@ -224,9 +253,7 @@ unsafe extern "system" fn overlay_wndproc(
     match msg {
         WM_ERASEBKGND => LRESULT(1),
         WM_PAINT => {
-            if let Some(app) = app_ptr() {
-                paint(hwnd, app.accent_color);
-            }
+            paint(hwnd);
             LRESULT(0)
         }
         WM_TIMER if wparam.0 == TIMER_ID => {

@@ -1,13 +1,12 @@
 use std::cell::RefCell;
 
 use windows::core::PCWSTR;
-use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, PostQuitMessage, RegisterClassExW,
     WINDOW_EX_STYLE, WM_DESTROY, WM_HOTKEY, WM_RBUTTONUP, WNDCLASSEXW, WS_OVERLAPPED,
 };
 
-use crate::accent;
 use crate::clipboard;
 use crate::error::AppError;
 use crate::hotkey;
@@ -39,7 +38,6 @@ pub struct App {
     pub hinstance: HINSTANCE,
     pub tray: Option<TrayIcon>,
     pub enabled: bool,
-    pub accent_color: COLORREF,
     pub fade_step: u8,
 }
 
@@ -51,7 +49,6 @@ impl App {
             hinstance,
             tray: None,
             enabled: true,
-            accent_color: COLORREF(0x00D77800),
             fade_step: 0,
         }
     }
@@ -103,9 +100,6 @@ impl App {
         // Register global hotkey
         hotkey::register(self.hwnd)?;
 
-        // Get accent color
-        self.accent_color = accent::get_accent_color();
-
         // Create system tray icon
         self.tray = Some(TrayIcon::create(self.hwnd)?);
 
@@ -130,12 +124,12 @@ impl App {
 
         match clipboard::strip_formatting(self.hwnd) {
             Ok(true) => {
-                self.accent_color = accent::get_accent_color();
                 self.fade_step = 0;
                 overlay::show(self.overlay_hwnd);
             }
             Ok(false) | Err(_) => {}
         }
+
     }
 
     pub fn on_timer(&mut self) {

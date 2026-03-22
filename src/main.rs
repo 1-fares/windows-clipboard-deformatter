@@ -1,6 +1,5 @@
 #![windows_subsystem = "windows"]
 
-mod accent;
 mod app;
 mod clipboard;
 mod error;
@@ -51,9 +50,25 @@ fn run() -> Result<(), AppError> {
     Ok(())
 }
 
+fn show_error(msg: &str) {
+    let wide = to_wide(msg);
+    let title = to_wide("Clipboard Deformatter");
+    unsafe {
+        windows::Win32::UI::WindowsAndMessaging::MessageBoxW(
+            None,
+            PCWSTR(wide.as_ptr()),
+            PCWSTR(title.as_ptr()),
+            windows::Win32::UI::WindowsAndMessaging::MB_OK
+                | windows::Win32::UI::WindowsAndMessaging::MB_ICONERROR,
+        );
+    }
+}
+
 fn main() {
-    if let Err(_e) = run() {
-        // In a windows_subsystem = "windows" app, we can't easily print errors.
-        // AlreadyRunning silently exits. Other errors just exit.
+    if let Err(e) = run() {
+        match e {
+            AppError::AlreadyRunning => {}
+            _ => show_error(&format!("{}", e)),
+        }
     }
 }
